@@ -16,14 +16,17 @@ from src.data.models.session import Session
 from src.data.schemas.event import EventContextRequest, PlanResponse
 from src.agent.crew import EventPlanningCrew
 
-from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
+import asyncio
+import json
+import threading
 
 router = APIRouter()
 
 # Initialize the Crew
 event_crew = EventPlanningCrew()
 
-@router.post("/plan", response_model=PlanResponse)
+@router.post("/plan")
 @limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chat"][0])
 async def generate_plan(
     request: Request,
@@ -38,7 +41,7 @@ async def generate_plan(
         session: The current session from the auth token.
 
     Returns:
-        PlanResponse: The processed and structured event plan.
+        StreamingResponse: SSE stream of the event plan.
 
     Raises:
         HTTPException: If there's an error processing the request.
@@ -51,11 +54,47 @@ async def generate_plan(
         )
 
         context_dict = event_context.model_dump()
-        result = await run_in_threadpool(event_crew.kickoff, context_dict)
+        queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
 
-        logger.info("event_plan_generated", session_id=session.id)
+        def sync_callback(task_output):
+            # TaskOutput has agent and raw
+            if hasattr(task_output, 'raw'):
+                agent_role = getattr(task_output.agent, 'role', 'Agent') if hasattr(task_output, 'agent') and task_output.agent else 'Agent'
+                content = task_output.raw
+            else:
+                agent_role = "Agent"
+                content = str(task_output)
+            
+            chunk = f"## {agent_role} Report\n{content}\n\n"
+            loop.call_soon_threadsafe(queue.put_nowait, chunk)
 
-        return PlanResponse(plan=result)
+        def worker():
+            try:
+                event_crew.kickoff(context_dict, task_callback=sync_callback)
+                loop.call_soon_threadsafe(queue.put_nowait, "[DONE]")
+            except Exception as e:
+                logger.error("worker_error", error=str(e), exc_info=True)
+                loop.call_soon_threadsafe(queue.put_nowait, f"ERROR: {str(e)}")
+                loop.call_soon_threadsafe(queue.put_nowait, "[DONE]")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        async def sse_generator():
+            while True:
+                chunk = await queue.get()
+                if chunk == "[DONE]":
+                    yield f"data: {json.dumps('[DONE]')}\n\n"
+                    break
+                if str(chunk).startswith("ERROR: "):
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                    break
+                yield f"data: {json.dumps(chunk)}\n\n"
+
+        logger.info("event_plan_streaming_started", session_id=session.id)
+        return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
     except Exception as e:
         logger.error("event_plan_request_failed", session_id=session.id, error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+

@@ -36,11 +36,20 @@ from src.data.db_manager import db_manager
 load_dotenv()
 
 # Initialize Langfuse
-langfuse = Langfuse(
-    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-    host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
-)
+langfuse_public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
+langfuse_secret_key = os.getenv("LANGFUSE_SECRET_KEY")
+langfuse_host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
+if langfuse_public_key and langfuse_secret_key and "your-langfuse" not in langfuse_public_key:
+    langfuse = Langfuse(
+        public_key=langfuse_public_key,
+        secret_key=langfuse_secret_key,
+        host=langfuse_host,
+    )
+    logger.info("Langfuse initialized", host=langfuse_host)
+else:
+    langfuse = None
+    logger.warning("Langfuse initialization skipped: Missing or placeholder API keys. Tracing is disabled.")
 
 
 @asynccontextmanager

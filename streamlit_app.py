@@ -2,8 +2,10 @@ import streamlit as st
 import requests
 import json
 
+import os
+
 # Configuration
-API_BASE_URL = "http://127.0.0.1:8001/api"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000/api/v1")
 
 # Page config
 st.set_page_config(
@@ -171,10 +173,32 @@ else:
             with st.spinner("Deploying 6-Agent AI Crew (Sponsors, Speakers, Ops, GTM, Exhibitors, Venues)... This may take a few minutes!"):
                 try:
                     headers = {"Authorization": f"Bearer {st.session_state.session_token}"}
-                    response = requests.post(f"{API_BASE_URL}/event/plan", headers=headers, json=payload)
+                    response = requests.post(f"{API_BASE_URL}/event/plan", headers=headers, json=payload, stream=True)
                     
                     if response.status_code == 200:
-                        st.session_state.plan_result = response.json().get("plan", "")
+                        st.success("Crew deployed! Waiting for streaming updates from agents...")
+                        placeholder = st.empty()
+                        full_content = ""
+                        
+                        for line in response.iter_lines():
+                            if line:
+                                decoded_line = line.decode('utf-8')
+                                if decoded_line.startswith("data: "):
+                                    data_content = decoded_line[6:]
+                                    try:
+                                        chunk = json.loads(data_content)
+                                        if chunk == "[DONE]":
+                                            break
+                                        if chunk.startswith("ERROR: "):
+                                            st.error(chunk)
+                                            break
+                                            
+                                        full_content += chunk
+                                        placeholder.markdown(full_content)
+                                    except Exception:
+                                        pass
+                                        
+                        st.session_state.plan_result = full_content
                         st.success("Plan generated successfully!")
                     else:
                         st.error(f"Error generating plan: {response.text}")

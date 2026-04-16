@@ -1,6 +1,6 @@
 import os
 from crewai import Agent, Task, Crew, Process, LLM
-from src.agent.tools import web_search, fetch_linkedin_data, analyze_communities, evaluate_venues, dynamic_cluster, detect_schedule_conflicts, score_speakers, score_sponsors
+from src.agent.tools import web_search, fetch_linkedin_data, analyze_communities, evaluate_venues, dynamic_cluster, detect_schedule_conflicts, score_speakers, score_sponsors, predict_pricing_and_attendance
 
 class EventPlanningCrew:
     def __init__(self):
@@ -82,16 +82,27 @@ class EventPlanningCrew:
             tools=[detect_schedule_conflicts] 
         )
 
+        pricing_agent = Agent(
+            role='Head of Revenue & Ticketing Strategy',
+            goal='Model the relationship between ticket pricing tiers and conversion rates to predict optimal pricing and attendance.',
+            backstory="""You are a data-driven revenue strategist. You analyze historical event footprints to predict the perfect ticket pricing tiers. You utilize models to maximize revenue without sacrificing target attendance goals.""",
+            verbose=True,
+            allow_delegation=False,
+            llm=self.llm,
+            tools=[predict_pricing_and_attendance]
+        )
+
         return {
             "sponsor": sponsor_agent,
             "speaker": speaker_agent,
             "exhibitor": exhibitor_agent,
             "venue": venue_agent,
+            "pricing": pricing_agent,
             "gtm": gtm_agent,
             "ops": ops_agent
         }
 
-    def setup_tasks(self, context: dict):
+    def setup_tasks(self, context: dict, task_callback=None):
         sponsor_task = Task(
             description=f"""
             We are organizing a {context['event_type']} ({context['event_category']}) in {context['location']} focusing on "{context['event_topic']}" targeting {context['target_audience']}.
@@ -108,7 +119,8 @@ class EventPlanningCrew:
             1. Sponsor Pipeline: A ranked list of the 4 sponsors with their relevance scores.
             2. Drafted Proposal: A professional, customized email proposal for the top-ranked sponsor.
             """,
-            agent=self.agents["sponsor"]
+            agent=self.agents["sponsor"],
+            callback=task_callback
         )
 
         speaker_task = Task(
@@ -128,7 +140,8 @@ class EventPlanningCrew:
             1. Verified Roster: A ranked list of the 3 figures with their ACTUAL follower counts and influence scores.
             2. Proposed Agenda Mapping: 3 specific session/performance titles with the recommended figure assigned.
             """,
-            agent=self.agents["speaker"]
+            agent=self.agents["speaker"],
+            callback=task_callback
         )
 
         exhibitor_task = Task(
@@ -148,7 +161,8 @@ class EventPlanningCrew:
             1. Exhibitor Target List: The categorized list of the 6 vendors broken down by the dynamic categories you chose.
             2. Sales Strategy Note: A short paragraph explaining which category to target first and why.
             """,
-            agent=self.agents["exhibitor"]
+            agent=self.agents["exhibitor"],
+            callback=task_callback
         )
 
         venue_task = Task(
@@ -169,7 +183,27 @@ class EventPlanningCrew:
             1. Evaluated Venue List: The ranked list of approved venues with their scores and capacities.
             2. Final Recommendation: A short paragraph pitching the winning venue based on logistics and financials.
             """,
-            agent=self.agents["venue"]
+            agent=self.agents["venue"],
+            callback=task_callback
+        )
+
+        pricing_task = Task(
+            description=f"""
+            We are determining the financial model for a {context['event_type']} focusing on "{context['event_topic']}" in {context['location']} targeting {context['expected_footfall']} attendees.
+            
+            Step 1: ACTION REQUIRED: You MUST use the 'Predictive Pricing & Attendance Model' tool. Pass the event_type ({context['event_type']}), expected_footfall ({context['expected_footfall']}), and location ({context['location']}) directly into this tool to simulate optimal pricing. Do not skip this step.
+            Step 2: Review the output of the pricing model, which includes recommended tiers (price and allocation), expected actual attendance, and revenue projections.
+            Step 3: Write a 2-paragraph revenue strategy explaining the relationship between the pricing tiers, the conversion rates, and the expected attendance, ensuring it ties back to the total event metrics.
+
+            CRITICAL INSTRUCTION: Complete all steps and provide the final strategy.
+            """,
+            expected_output="""
+            A structured report containing:
+            1. Pricing Tiers & Simulation: A breakdown of the recommended tiers (Early Bird, Standard, VIP).
+            2. Revenue Strategy: A clear explanation of why these prices will maximize attendance and revenue.
+            """,
+            agent=self.agents["pricing"],
+            callback=task_callback
         )
 
         gtm_task = Task(
@@ -192,7 +226,8 @@ class EventPlanningCrew:
                - Draft A: Discord/Slack/Reddit message (Casual, high energy).
                - Draft B: LinkedIn Group post (Professional, value-driven).
             """,
-            agent=self.agents["gtm"]
+            agent=self.agents["gtm"],
+            callback=task_callback
         )
 
         ops_task = Task(
@@ -221,24 +256,42 @@ class EventPlanningCrew:
             1. The Final Approved Itinerary: A chronological list of sessions with their assigned times and rooms.
             2. Resource Utilization Note: A brief explanation of why you assigned specific sessions to the Main Stage vs the Secondary space.
             """,
-            agent=self.agents["ops"]
+            agent=self.agents["ops"],
+            callback=task_callback
         )
 
-        self.tasks = [sponsor_task, speaker_task, exhibitor_task, venue_task, gtm_task, ops_task]
+        self.tasks = [sponsor_task, speaker_task, exhibitor_task, venue_task, pricing_task, gtm_task, ops_task]
         return self.tasks
 
-    def kickoff(self, context: dict) -> str:
-        tasks = self.setup_tasks(context)
+    def kickoff(self, context: dict, task_callback=None) -> str:
+        tasks = self.setup_tasks(context, task_callback)
         
-        master_event_crew = Crew(
-            agents=list(self.agents.values()),
-            tasks=tasks,
-            process=Process.sequential,
-            verbose=True,
-            memory=True,
-            cache=True
-        )
+        # When creating the Crew, pass along the task_callback so we can stream output when tasks finish
+        crew_kwargs = {
+            "agents": list(self.agents.values()),
+            "tasks": tasks,
+            "process": Process.sequential,
+            "verbose": True,
+            "memory": False,
+            "cache": True
+        }
+        if task_callback:
+            crew_kwargs["task_callback"] = task_callback
+            
+        master_event_crew = Crew(**crew_kwargs)
         
         # CrewAI kickoff natively returns a structured Output object or string
-        # To be safe, we just return the string format of it
-        return str(master_event_crew.kickoff())
+        final_crew_output = master_event_crew.kickoff()
+        
+        full_plan = ["# 📋 Master Event Plan"]
+        
+        # Aggregate output from all tasks
+        for task in tasks:
+            if hasattr(task, 'output') and task.output:
+                role = task.agent.role if task.agent else "Agent"
+                full_plan.append(f"## {role} Report\n{str(task.output)}")
+        
+        if len(full_plan) > 1:
+            return "\n\n---\n\n".join(full_plan)
+            
+        return str(final_crew_output)

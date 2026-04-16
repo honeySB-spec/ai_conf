@@ -49,6 +49,28 @@ services:
     networks:
       - monitoring
 
+  # Streamlit Frontend UI
+  frontend:
+    build:
+      context: .
+      args:
+        APP_ENV: ${APP_ENV:-development}
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./streamlit_app.py:/app/streamlit_app.py
+    env_file:
+      - .env.${APP_ENV:-development}
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - API_BASE_URL=http://app:8000/api/v1
+    command: ["/app/.venv/bin/streamlit", "run", "streamlit_app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+    depends_on:
+      - app
+    restart: on-failure
+    networks:
+      - monitoring
+
   # Prometheus
   prometheus:
     image: prom/prometheus:latest

@@ -42,7 +42,7 @@ class LLMRegistry:
     LLMS: List[Dict[str, Any]] = [
         {
             "name": "gpt-5-mini",
-            "llm": ChatOpenAI(
+            "factory": lambda: ChatOpenAI(
                 model="gpt-5-mini",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
@@ -51,7 +51,7 @@ class LLMRegistry:
         },
         {
             "name": "gpt-5",
-            "llm": ChatOpenAI(
+            "factory": lambda: ChatOpenAI(
                 model="gpt-5",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
@@ -60,7 +60,7 @@ class LLMRegistry:
         },
         {
             "name": "gpt-5-nano",
-            "llm": ChatOpenAI(
+            "factory": lambda: ChatOpenAI(
                 model="gpt-5-nano",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
@@ -69,7 +69,7 @@ class LLMRegistry:
         },
         {
             "name": "gpt-4o",
-            "llm": ChatOpenAI(
+            "factory": lambda: ChatOpenAI(
                 model="gpt-4o",
                 temperature=settings.DEFAULT_LLM_TEMPERATURE,
                 api_key=settings.OPENAI_API_KEY,
@@ -81,7 +81,7 @@ class LLMRegistry:
         },
         {
             "name": "gpt-4o-mini",
-            "llm": ChatOpenAI(
+            "factory": lambda: ChatOpenAI(
                 model="gpt-4o-mini",
                 temperature=settings.DEFAULT_LLM_TEMPERATURE,
                 api_key=settings.OPENAI_API_KEY,
@@ -125,6 +125,8 @@ class LLMRegistry:
 
         # Return the default instance
         logger.debug("using_default_llm_instance", model_name=model_name)
+        if "llm" not in model_entry:
+            model_entry["llm"] = model_entry["factory"]()
         return model_entry["llm"]
 
     @classmethod
@@ -178,7 +180,7 @@ class LLMService:
         except (ValueError, Exception) as e:
             # Default model not found, use first model
             self._current_model_index = 0
-            self._llm = LLMRegistry.LLMS[0]["llm"]
+            self._llm = LLMRegistry.get(LLMRegistry.LLMS[0]["name"])
             logger.warning(
                 "default_model_not_found_using_first",
                 requested=settings.DEFAULT_LLM_MODEL,
@@ -214,7 +216,7 @@ class LLMService:
             )
 
             self._current_model_index = next_index
-            self._llm = next_model_entry["llm"]
+            self._llm = LLMRegistry.get(next_model_entry["name"])
 
             logger.info("model_switched", new_model=next_model_entry["name"], new_index=next_index)
             return True
