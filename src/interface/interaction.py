@@ -66,6 +66,13 @@ async def generate_plan(
                 agent_role = "Agent"
                 content = str(task_output)
             
+            # Save message to database asynchronously
+            from src.data.db_manager import db_manager
+            asyncio.run_coroutine_threadsafe(
+                db_manager.save_message(session.id, agent_role, content),
+                loop
+            )
+            
             chunk = f"## {agent_role} Report\n{content}\n\n"
             loop.call_soon_threadsafe(queue.put_nowait, chunk)
 
@@ -97,4 +104,28 @@ async def generate_plan(
     except Exception as e:
         logger.error("event_plan_request_failed", session_id=session.id, error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions")
+async def get_sessions(
+    request: Request,
+    session: Session = Depends(get_current_session),
+):
+    """Get all event planning sessions for the current user."""
+    from src.data.db_manager import db_manager
+    sessions = await db_manager.get_user_sessions(session.user_id)
+    return sessions
+
+
+@router.get("/sessions/{session_id}/messages")
+async def get_session_messages(
+    session_id: str,
+    request: Request,
+    current_session: Session = Depends(get_current_session),
+):
+    """Get all messages/reports for a specific session."""
+    from src.data.db_manager import db_manager
+    # Ensure the user owns this session or it's their current one
+    messages = await db_manager.get_session_messages(session_id)
+    return messages
 

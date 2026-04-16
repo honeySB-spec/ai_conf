@@ -22,6 +22,7 @@ from src.config.settings import (
 from src.system.logs import logger
 from src.data.models.session import Session as ChatSession
 from src.data.models.user import User
+from src.data.models.message import Message
 
 
 class DatabaseService:
@@ -222,6 +223,45 @@ class DatabaseService:
             session.refresh(chat_session)
             logger.info("session_name_updated", session_id=session_id, name=name)
             return chat_session
+
+    async def save_message(self, session_id: str, agent_role: str, content: str, msg_type: str = "report") -> Message:
+        """Save a new message to the database.
+
+        Args:
+            session_id: The ID of the session the message belongs to
+            agent_role: The role of the agent who sent the message
+            content: The message content
+            msg_type: The type of message (default: "report")
+
+        Returns:
+            Message: The saved message object
+        """
+        with Session(self.engine) as session:
+            message = Message(
+                session_id=session_id,
+                agent_role=agent_role,
+                content=content,
+                type=msg_type
+            )
+            session.add(message)
+            session.commit()
+            session.refresh(message)
+            logger.info("message_saved", session_id=session_id, agent_role=agent_role, type=msg_type)
+            return message
+
+    async def get_session_messages(self, session_id: str) -> List[Message]:
+        """Get all messages for a specific session.
+
+        Args:
+            session_id: The ID of the session
+
+        Returns:
+            List[Message]: List of messages in chronological order
+        """
+        with Session(self.engine) as session:
+            statement = select(Message).where(Message.session_id == session_id).order_by(Message.created_at)
+            messages = session.exec(statement).all()
+            return messages
 
     def get_session_maker(self):
         """Get a session maker for creating database sessions.

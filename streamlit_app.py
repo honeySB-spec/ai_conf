@@ -66,6 +66,8 @@ if "session_token" not in st.session_state:
     st.session_state.session_token = None
 if "plan_result" not in st.session_state:
     st.session_state.plan_result = None
+if "viewing_history" not in st.session_state:
+    st.session_state.viewing_history = False
 
 # ---- SIDEBAR: AUTHENTICATION ----
 with st.sidebar:
@@ -124,10 +126,41 @@ with st.sidebar:
                     st.error(f"Error connecting to backend: {e}")
     else:
         st.success("Authenticated!")
-        if st.button("Log Out"):
+        
+        # ---- HISTORY SECTION ----
+        st.divider()
+        st.subheader("📜 Plan History")
+        
+        try:
+            headers = {"Authorization": f"Bearer {st.session_state.session_token}"}
+            h_resp = requests.get(f"{API_BASE_URL}/event/sessions", headers=headers)
+            if h_resp.status_code == 200:
+                sessions = h_resp.json()
+                if not sessions:
+                    st.info("No past plans found.")
+                else:
+                    for s in sessions:
+                        s_id = s.get("id")
+                        s_name = s.get("name") or f"Session {s_id[:8]}"
+                        if st.button(f"📄 {s_name}", key=f"btn_{s_id}"):
+                            # Fetch messages for this session
+                            m_resp = requests.get(f"{API_BASE_URL}/event/sessions/{s_id}/messages", headers=headers)
+                            if m_resp.status_code == 200:
+                                messages = m_resp.json()
+                                st.session_state.plan_result = "\n\n".join([f"### {m['agent_role']}\n{m['content']}" for m in messages])
+                                st.session_state.viewing_history = True
+                                st.rerun()
+            else:
+                st.error("Failed to load history.")
+        except Exception as e:
+            st.error(f"Error loading history: {e}")
+
+        st.divider()
+        if st.button("🚪 Log Out"):
             st.session_state.access_token = None
             st.session_state.session_token = None
             st.session_state.plan_result = None
+            st.session_state.viewing_history = False
             st.rerun()
 
 # ---- MAIN AREA: EVENT FORM ----
@@ -136,6 +169,11 @@ st.markdown("<p style='text-align: center; color: #6b7280; font-size: 1.1rem;'>O
 
 if st.session_state.session_token is None:
     st.info("Please log in using the sidebar to start configuring your event.")
+elif st.session_state.viewing_history:
+    if st.button("⬅️ Start New Plan"):
+        st.session_state.viewing_history = False
+        st.session_state.plan_result = None
+        st.rerun()
 else:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Event Configuration")

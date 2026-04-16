@@ -6,8 +6,8 @@ class EventPlanningCrew:
     def __init__(self):
         # Initialize the LLM config as used in test.py
         self.llm = LLM(
-            model="openrouter/meta-llama/llama-3.3-70b-instruct",
-            api_key=os.environ.get("OPENROUTER_API_KEY", "YOUR_OPENROUTER_KEY")
+            model="openrouter/google/gemini-2.0-flash-001",
+            api_key=os.environ.get("OPENROUTER_API_KEY")
         )
         self.agents = self.setup_agents()
         self.tasks = []
@@ -273,7 +273,8 @@ class EventPlanningCrew:
             "process": Process.sequential,
             "verbose": True,
             "memory": False,
-            "cache": True
+            "cache": True,
+            
         }
         if task_callback:
             crew_kwargs["task_callback"] = task_callback

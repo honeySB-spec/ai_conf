@@ -14,6 +14,7 @@ from src.data.models.base import BaseModel
 
 if TYPE_CHECKING:
     from src.data.models.user import User
+    from src.data.models.message import Message
 
 
 class Session(BaseModel, table=True):
@@ -32,3 +33,4 @@ class Session(BaseModel, table=True):
     user_id: int = Field(foreign_key="user.id")
     name: str = Field(default="")
     user: "User" = Relationship(back_populates="sessions")
+    messages: List["Message"] = Relationship(back_populates="session", cascade_delete=True)
