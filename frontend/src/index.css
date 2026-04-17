@@ -109,14 +109,54 @@ input:focus {
 }
 
 /* SSE Report Styling */
-.report-section {
-  border-top: 8px solid var(--text-color);
-  padding-top: calc(var(--spacing-unit) * 4);
-  margin-top: calc(var(--spacing-unit) * 8);
+.reports-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  margin-top: 32px;
+}
+
+.agent-card {
+  border: 4px solid var(--text-color);
+  background: var(--bg-color);
+  position: relative;
+  transition: transform 0.2s ease;
+}
+
+.agent-card:hover {
+  transform: translateX(4px) translateY(-4px);
+  box-shadow: -4px 4px 0px var(--text-color);
+}
+
+.agent-header {
+  background: var(--text-color);
+  color: var(--bg-color);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.agent-name {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background: #00ff00;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+}
+
+.agent-body {
+  padding: 24px;
 }
 
 .agent-report {
-  margin-bottom: calc(var(--spacing-unit) * 6);
   animation: fadeIn 0.5s ease-out;
 }
 

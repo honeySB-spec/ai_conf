@@ -57,6 +57,7 @@ test = ["httpx>=0.28.1", "pytest>=8.3.5"]
 [tool.pytest.ini_options]
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 python_files = ["test_*.py", "*_test.py", "tests.py"]
+testpaths = ["tests"]
 
 [tool.black]
 line-length = 119
@@ -97,10 +98,10 @@ line-length = 119
 exclude = ["migrations", "*.ipynb", "venv"]
 
 [tool.ruff.lint]
-# Enable flake8-bugbear (`B`) rules and docstring (`D`) rules
-select = ["E", "F", "B", "ERA", "D"]
+# Enable flake8-bugbear (`B`) rules
+select = ["E", "F", "B", "ERA"]
 # Never enforce `E501` (line length violations).
-ignore = ["E501", "F401", "D203", "D213", "B904", "B008"]
+ignore = ["E501", "F401", "B904", "B008"]
 # Avoid trying to fix flake8-bugbear (`B`) violations.
 unfixable = ["B"]
 

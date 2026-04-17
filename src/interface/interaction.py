@@ -73,7 +73,11 @@ async def generate_plan(
                 loop
             )
             
-            chunk = f"## {agent_role} Report\n{content}\n\n"
+            # Send structured data for better UI rendering
+            chunk = {
+                "agent": agent_role,
+                "content": content
+            }
             loop.call_soon_threadsafe(queue.put_nowait, chunk)
 
         def worker():

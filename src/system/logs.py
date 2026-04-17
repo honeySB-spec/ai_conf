@@ -29,7 +29,7 @@ from src.config.settings import (
 settings.LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Context variables for storing request-specific data
-_request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default={})
+_request_context: ContextVar[Optional[Dict[str, Any]]] = ContextVar("request_context", default=None)
 
 
 def bind_context(**kwargs: Any) -> None:
@@ -38,13 +38,13 @@ def bind_context(**kwargs: Any) -> None:
     Args:
         **kwargs: Key-value pairs to bind to the logging context
     """
-    current = _request_context.get()
+    current = get_context()
     _request_context.set({**current, **kwargs})
 
 
 def clear_context() -> None:
     """Clear all context variables for the current request."""
-    _request_context.set({})
+    _request_context.set(None)
 
 
 def get_context() -> Dict[str, Any]:
@@ -53,7 +53,7 @@ def get_context() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Current context dictionary
     """
-    return _request_context.get()
+    return _request_context.get() or {}
 
 
 def add_context_to_event_dict(logger: Any, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:

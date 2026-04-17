@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState } from 'react';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { Send, LogOut, Calendar, Users, MapPin, DollarSign, Search, Loader2 } from 'lucide-react';
 
 const API_BASE_URL = '/api/v1';
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const savedToken = localStorage.getItem('token');
+    return savedToken ? { email: 'user@example.com' } : null;
+  });
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -26,14 +29,7 @@ function App() {
 
   const [reports, setReports] = useState([]);
   const [planning, setPlanning] = useState(false);
-  const eventSourceRef = useRef(null);
 
-  useEffect(() => {
-    if (token) {
-      // In a real app, we'd verify the token here
-      setUser({ email: 'user@example.com' }); // Placeholder
-    }
-  }, [token]);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -126,7 +122,7 @@ function App() {
                 setPlanning(false);
                 break;
               }
-              if (data.startsWith('ERROR: ')) {
+              if (typeof data === 'string' && data.startsWith('ERROR: ')) {
                 setError(data);
                 setPlanning(false);
                 break;
@@ -147,7 +143,7 @@ function App() {
   if (!user) {
     return (
       <div className="container" style={{ maxWidth: '500px', marginTop: '10vh' }}>
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -180,7 +176,7 @@ function App() {
               {isLogin ? 'OR CREATE ACCOUNT' : 'OR LOGIN'}
             </p>
           </form>
-        </motion.div>
+        </Motion.div>
       </div>
     );
   }
@@ -198,7 +194,7 @@ function App() {
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '80px' }}>
-        <motion.section
+        <Motion.section
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
         >
@@ -284,7 +280,7 @@ function App() {
               {planning ? <Loader2 className="animate-spin" style={{ margin: '0 auto' }} /> : 'GENERATE PLAN'}
             </button>
           </form>
-        </motion.section>
+        </Motion.section>
 
         <section>
           <h2 style={{ marginBottom: '2rem' }}>OUTPUT.</h2>
@@ -292,26 +288,49 @@ function App() {
             {reports.length === 0 && !planning && (
               <p style={{ color: '#ccc', fontStyle: 'italic' }}>Awaiting input...</p>
             )}
-            <AnimatePresence>
-              {reports.map((report, idx) => (
-                <motion.div 
-                  key={idx}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="agent-report"
-                >
-                  <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.6' }}>{report}</p>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+            <div className="reports-grid">
+              <AnimatePresence>
+                {reports.map((report, idx) => {
+                  const isStructured = typeof report === 'object' && report.agent;
+                  return (
+                    <Motion.div 
+                      key={idx}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="agent-card"
+                    >
+                      {isStructured ? (
+                        <>
+                          <div className="agent-header">
+                            <span className="agent-name">{report.agent}</span>
+                            <span className="status-dot"></span>
+                          </div>
+                          <div className="agent-body">
+                            <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                              {report.content}
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="agent-body">
+                          <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                            {report}
+                          </p>
+                        </div>
+                      )}
+                    </Motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
             {planning && (
-              <motion.div 
+              <Motion.div 
                 animate={{ opacity: [0.4, 1, 0.4] }} 
                 transition={{ repeat: Infinity, duration: 1.5 }}
                 style={{ fontWeight: 800, fontSize: '0.8rem', letterSpacing: '0.1em' }}
               >
                 AGENTS ARE WORKING...
-              </motion.div>
+              </Motion.div>
             )}
             {error && <p style={{ color: 'red', fontWeight: 700 }}>{error}</p>}
           </div>
